@@ -9,45 +9,44 @@ Base_nueva<- Base%>%
   mutate(Salary_In_USD= (Salary_In_Rupees/78.63))
 View(Base_nueva)
 
+
+library(shiny)
+library(bslib) 
+
 library(shiny)
 
-# Define UI for application that draws a histogram
 ui <- fluidPage(
-
-    # Application title
-    titlePanel("Old Faithful Geyser Data"),
-
-    # Sidebar with a slider input for number of bins 
-    sidebarLayout(
-        sidebarPanel(
-            sliderInput("bins",
-                        "Number of bins:",
-                        min = 1,
-                        max = 50,
-                        value = 30)
-        ),
-
-        # Show a plot of the generated distribution
-        mainPanel(
-           plotOutput("distPlot")
-        )
+  titlePanel("Explorador de Salarios en Ciencia de Datos"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      # Filtros globales
+      checkboxGroupInput("years", "Año de trabajo:",
+                         choices = c(2020, 2021, 2022),
+                         selected = c(2020, 2021, 2022)),
+      
+      checkboxGroupInput("exp", "Nivel de experiencia:",
+                         choices = c("EN", "MI", "SE", "EX"),
+                         selected = c("EN", "MI", "SE", "EX")),
+      
+      checkboxGroupInput("size", "Tamaño de empresa:",
+                         choices = c("S", "M", "L"),
+                         selected = c("S", "M", "L"))
+    ),
+    
+    mainPanel(
+      tabsetPanel(
+        
+        # --- Pestaña 3 ---
+        tabPanel("Modalidad de trabajo y salario",
+                 plotOutput("boxplot_modalidad"),
+                 tableOutput("summary_modalidad")),
+        
+        # --- Pestaña 4 ---
+        tabPanel("Evolución temporal del salario",
+                 plotOutput("lineplot_evolucion"),
+                 textOutput("nota_metodologica"))
+      )
     )
+  )
 )
-
-# Define server logic required to draw a histogram
-server <- function(input, output) {
-
-    output$distPlot <- renderPlot({
-        # generate bins based on input$bins from ui.R
-        x    <- faithful[, 2]
-        bins <- seq(min(x), max(x), length.out = input$bins + 1)
-
-        # draw the histogram with the specified number of bins
-        hist(x, breaks = bins, col = 'darkgray', border = 'white',
-             xlab = 'Waiting time to next eruption (in mins)',
-             main = 'Histogram of waiting times')
-    })
-}
-
-# Run the application 
-shinyApp(ui = ui, server = server)
