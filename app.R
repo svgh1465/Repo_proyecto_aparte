@@ -11,16 +11,18 @@ View(Base_nueva)
 
 
 library(shiny)
-library(bslib) 
+library(dplyr)
+library(ggplot2)
+library(readr)
 
-library(shiny)
 
+
+# --- 2. UI ---
 ui <- fluidPage(
   titlePanel("Explorador de Salarios en Ciencia de Datos"),
   
   sidebarLayout(
     sidebarPanel(
-      # Filtros globales
       checkboxGroupInput("years", "Año de trabajo:",
                          choices = c(2020, 2021, 2022),
                          selected = c(2020, 2021, 2022)),
@@ -36,7 +38,6 @@ ui <- fluidPage(
     
     mainPanel(
       tabsetPanel(
-        
         # --- Pestaña 3 ---
         tabPanel("Modalidad de trabajo y salario",
                  plotOutput("boxplot_modalidad"),
@@ -50,3 +51,56 @@ ui <- fluidPage(
     )
   )
 )
+
+# --- 3. SERVER ---
+server <- function(input, output) {
+  
+  # Filtros globales
+  filtered <- reactive({
+    Base_nueva %>%
+      filter(Working_Year %in% input$years,
+             Experience %in% input$exp,
+             Company_Size %in% input$size)
+  })
+  
+  # --- Pestaña 3 ---
+  output$boxplot_modalidad <- renderPlot({
+    ggplot(filtered(), aes(x = factor(Remote_Working_Ratio,
+                                      labels = c("Presencial","Híbrido","Remoto")),
+                           y = Salary_In_USD)) +
+      geom_boxplot(fill = "#007bc2") +
+      labs(x = "Modalidad de trabajo", y = "Salario en USD")
+  })
+  
+  output$summary_modalidad <- renderTable({
+    filtered() %>%
+      group_by(Remote_Working_Ratio) %>%
+      summarise(Mediana = median(Salary_In_USD),
+                Promedio = mean(Salary_In_USD),
+                N = n())
+  })
+  
+  # --- Pestaña 4 ---
+  output$lineplot_evolucion <- renderPlot({
+    filtered() %>%
+      group_by(Working_Year, Experience) %>%
+      summarise(Promedio = mean(Salary_In_USD), .groups = "drop") %>%
+      ggplot(aes(x = Working_Year, y = Promedio, color = Experience)) +
+      geom_line(size = 1.2) +
+      geom_point() +
+      labs(x = "Año", y = "Salario promedio (USD)")
+  })
+  
+  output$nota_metodologica <- renderText({
+    "Nota: los años 2020 y 2021 tienen menos observaciones que 2022, lo que puede afectar la estabilidad de las estimaciones promedio."
+  })
+}
+
+# --- 4. Ejecutar app ---
+shinyApp(ui, server)
+
+
+
+
+
+quiero_pere<- "obvio"
