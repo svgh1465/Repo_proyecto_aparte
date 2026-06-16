@@ -10,79 +10,164 @@ Base_nueva<- Base%>%
 View(Base_nueva)
 
 
+# PARTE 1: estructura base + sidebar + pestaña 1
+# a cargo de kiany
+
 library(shiny)
-library(dplyr)
 library(ggplot2)
+library(dplyr)
+library(DT)
 library(readr)
 
+# datos que tienen ruta relativa dentro del proyecto
+datos <- read_csv("Data_Science_Fields_Salary_Categorization.csv")
+
+# quitar separador de miles de variable "Salary_In_RUpees"
+datos$Salary_In_Rupees <- as.numeric(gsub(",","",
+                                          datos$Salary_In_Rupees))
+
+# VARIABLE DERIVADA: 
+# rupias a dólares con tasa fija de 1USD=78.63INR (promedio RBI 2022)
+datos$Salary_In_USD <- round(datos$Salary_In_Rupees / 78.63, 2)
+
+# variables en factor para los gráficos
+datos$Experience <- factor(datos$Experience,
+                           levels = c("EN","MI","SE","EX"))
+datos$Company_Size <- factor(datos$Company_Size,
+                             levels = c("S","M","L"))
+datos$Working_Year <- as.integer(datos$Working_Year)
 
 
-# --- 2. UI ---
+
+# INTERFAZ 
+
 ui <- fluidPage(
-  titlePanel("Explorador de Salarios en Ciencia de Datos"),
+  titlePanel("Explorador de salarios en Ciencia de Datos"),
   
+  # filtros globales 
   sidebarLayout(
     sidebarPanel(
-      checkboxGroupInput("years", "Año de trabajo:",
-                         choices = c(2020, 2021, 2022),
-                         selected = c(2020, 2021, 2022)),
+      width = 3,
+      h4("Filtros globales"),
+      hr(),
       
-      checkboxGroupInput("exp", "Nivel de experiencia:",
-                         choices = c("EN", "MI", "SE", "EX"),
-                         selected = c("EN", "MI", "SE", "EX")),
+      #filtro por año
+      checkboxGroupInput(
+        inputId = "filtro_año",
+        label = "Año de trabajo:",
+        choices = c("2020","2021","2022"),
+        selected = c("2020","2021","2022")
+      ),
       
-      checkboxGroupInput("size", "Tamaño de empresa:",
-                         choices = c("S", "M", "L"),
-                         selected = c("S", "M", "L"))
+      hr(),
+      
+      # filtro por nivel experiencia
+      checkboxGroupInput(
+        inputId = "filtro_experiencia",
+        label = "Nivel de experiencia:",
+        choices = c("EN (júnior)" = "EN",
+                    "MI (intermedio)" = "MI",
+                    "SE (sénior)" = "SE",
+                    "EX (ejecutivo)" = "EX"),
+        selected = c("EN","MI","SE","EX")
+      ),
+      
+      hr(),
+      
+      # filtro por tamaño empresa
+      checkboxGroupInput(
+        inputId = "filtro_tamaño",
+        label = "Tamaño de empresa:",
+        choices = c("S (pequeña)" = "S",
+                    "M (mediana)" = "M",
+                    "L (grande)" = "L"),
+        selected = c("S","M","L")
+      ),
+      
+      hr(),
+      
+      # indicador registros activos en c/filtro
+      h5("Registros activos:"),
+      textOutput("n_registros")
     ),
     
+    
+    # PRINCIPAL: LAS PESTAÑAS
     mainPanel(
+      width = 9,
+      
       tabsetPanel(
-        # --- Pestaña 3 ---
-        tabPanel("Modalidad de trabajo y salario",
-                 plotOutput("boxplot_modalidad"),
-                 tableOutput("summary_modalidad")),
+        id="pestañas",
         
-        # --- Pestaña 4 ---
-        tabPanel("Evolución temporal del salario",
-                 plotOutput("lineplot_evolucion"),
-                 textOutput("nota_metodologica"))
+        # PESTAÑA 1 por hacer 
+        
+        # demás pestañas 
+       
+            # --- Pestaña 3 ---
+            tabPanel("Modalidad de trabajo y salario",
+                     plotOutput("boxplot_modalidad"),
+                     tableOutput("summary_modalidad")),
+            
+            # --- Pestaña 4 ---
+            tabPanel("Evolución temporal del salario",
+                     plotOutput("lineplot_evolucion"),
+                     textOutput("nota_metodologica"))
       )
     )
   )
 )
 
-# --- 3. SERVER ---
-server <- function(input, output) {
+
+
+# SERVIDOR / LÓGICA
+
+server <- function(input, output, session){
+  
+  # los datos reactivos aplica los fltros globales
+  # esto lo pueden usar TODAS las pestañas
+  datos_filtrados <- reactive({
+    datos |>
+      filter(
+        Working_Year %in% as.integer(input$filtro_año),
+        Experience %in% input$filtro_experiencia,
+        Company_Size %in% input$filtro_tamaño
+      )
+  })
+  
+  # contador de registros activos
+  output$n_registros <- renderText({
+    paste(nrow(datos_filtrados()), "de", nrow(datos), "registros.")
+  })
+  
+  # log pestaña 1 
   
   # Filtros globales
-  filtered <- reactive({
-    Base_nueva %>%
-      filter(Working_Year %in% input$years,
-             Experience %in% input$exp,
-             Company_Size %in% input$size)
-  })
   
   # --- Pestaña 3 ---
   output$boxplot_modalidad <- renderPlot({
-    ggplot(filtered(), aes(x = factor(Remote_Working_Ratio,
-                                      labels = c("Presencial","Híbrido","Remoto")),
-                           y = Salary_In_USD)) +
-      geom_boxplot(fill = "#007bc2") +
+    datos_filtrados() %>%
+      ggplot(aes(x = factor(Remote_Working_Ratio,
+                            levels = c(0,50,100),
+                            labels = c("Presencial","Híbrido","Remoto")),
+                 y = Salary_In_USD)) +
+      geom_boxplot(fill = "lightblue") +
       labs(x = "Modalidad de trabajo", y = "Salario en USD")
   })
   
   output$summary_modalidad <- renderTable({
-    filtered() %>%
+    datos_filtrados() %>%
       group_by(Remote_Working_Ratio) %>%
-      summarise(Mediana = median(Salary_In_USD),
-                Promedio = mean(Salary_In_USD),
-                N = n())
+      summarise(
+        Mediana = median(Salary_In_USD),
+        Promedio = mean(Salary_In_USD),
+        N = n(),
+        .groups = "drop"
+      )
   })
   
   # --- Pestaña 4 ---
   output$lineplot_evolucion <- renderPlot({
-    filtered() %>%
+    datos_filtrados() %>%
       group_by(Working_Year, Experience) %>%
       summarise(Promedio = mean(Salary_In_USD), .groups = "drop") %>%
       ggplot(aes(x = Working_Year, y = Promedio, color = Experience)) +
@@ -94,13 +179,13 @@ server <- function(input, output) {
   output$nota_metodologica <- renderText({
     "Nota: los años 2020 y 2021 tienen menos observaciones que 2022, lo que puede afectar la estabilidad de las estimaciones promedio."
   })
+  
 }
 
-# --- 4. Ejecutar app ---
-shinyApp(ui, server)
+
+
+# app para terminar
+shinyApp(ui=ui, server = server)
 
 
 
-
-
-quiero_pere<- "obvio"
